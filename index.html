@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jake's Pokémon BST Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        .input-container {
+            margin: 20px 0;
+        }
+        input[type="number"] {
+            padding: 10px;
+            font-size: 16px;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #results {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background-color: white;
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .error {
+            color: red;
+        }
+        .loading {
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+    <h1>Jake's Pokémon BST Search</h1>
+    <div class="input-container">
+        <label for="bst-input">Enter BST:</label>
+        <input type="number" id="bst-input" min="1" max="1000" placeholder="e.g., 580">
+        <button id="search-btn">Search</button>
+    </div>
+    <div id="results"></div>
+
+    <script>
+        let bstMap = new Map(); // BST => [array of pokemon names]
+        const resultsDiv = document.getElementById('results');
+        const searchBtn = document.getElementById('search-btn');
+
+        // Function to capitalize names (e.g., 'pikachu' -> 'Pikachu')
+        function capitalize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1).replace(/-/g, ' ');
+        }
+
+        // Load data from PokeAPI on page load
+        async function loadPokemonData() {
+            resultsDiv.innerHTML = '<p class="loading">Loading Pokémon data (this may take a moment for all gens/forms)...</p>';
+            searchBtn.disabled = true;
+
+            try {
+                const listResponse = await fetch('https://pokeapi.co/api/v2/pokemon?limit=2000&offset=0');
+                if (!listResponse.ok) throw new Error('Failed to fetch Pokémon list');
+                const listData = await listResponse.json();
+
+                // Fetch details in batches to avoid overwhelming the API/browser
+                const batchSize = 100;
+                for (let i = 0; i < listData.results.length; i += batchSize) {
+                    const batch = listData.results.slice(i, i + batchSize);
+                    const promises = batch.map(async (p) => {
+                        const res = await fetch(p.url);
+                        if (!res.ok) return; // Skip errors
+                        const data = await res.json();
+                        const bst = data.stats.reduce((acc, s) => acc + s.base_stat, 0);
+                        const name = capitalize(data.name); // Pretty name
+
+                        if (!bstMap.has(bst)) {
+                            bstMap.set(bst, []);
+                        }
+                        bstMap.get(bst).push(name);
+                    });
+                    await Promise.all(promises);
+                    // Optional: Small delay between batches (e.g., 1s) to be kind to API
+                    if (i + batchSize < listData.results.length) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+
+                resultsDiv.innerHTML = '<p>Data loaded! Enter a BST above. (Includes all gens, forms, Megas, etc.)</p>';
+                searchBtn.disabled = false;
+            } catch (error) {
+                resultsDiv.innerHTML = '<p class="error">Error loading data: ' + error.message + '. Try refreshing.</p>';
+            }
+        }
+
+        // Load data immediately
+        loadPokemonData();
+
+        // Search button handler
+        searchBtn.addEventListener('click', () => {
+            const input = document.getElementById('bst-input');
+            const bst = parseInt(input.value);
+
+            if (isNaN(bst) || bst < 1) {
+                resultsDiv.innerHTML = '<p class="error">Please enter a valid BST (positive number).</p>';
+                return;
+            }
+
+            const matches = bstMap.get(bst) || [];
+            if (matches.length === 0) {
+                resultsDiv.innerHTML = '<p>No Pokémon found with BST ' + bst + '.</p>';
+            } else {
+                let listHtml = '<h2>Pokémon with BST ' + bst + ':</h2><ul>';
+                matches.sort().forEach(name => {
+                    listHtml += '<li>' + name + '</li>';
+                });
+                listHtml += '</ul>';
+                resultsDiv.innerHTML = listHtml;
+            }
+        });
+    </script>
+</body>
+</html>
